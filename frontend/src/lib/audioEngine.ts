@@ -10,17 +10,7 @@ type PlayEvent = {
 };
 
 export class CTAAudioEngine {
-  private lineToInstrument: Partial<
-    Record<
-      string,
-      | Tone.Synth
-      | Tone.FMSynth
-      | Tone.PluckSynth
-      | Tone.MembraneSynth
-      | Tone.PolySynth
-      | Tone.DuoSynth
-    >
-  > = {};
+  private lineToInstrument: Partial<Record<string, Tone.Synth>> = {};
 
   private noteWindowStart = Date.now();
   private noteCountInWindow = 0;
@@ -28,6 +18,8 @@ export class CTAAudioEngine {
   private volumeDb = -8;
   private isReady = false;
   private fallbackInstrument: Tone.Synth | null = null;
+  private masterCompressor: Tone.Compressor | null = null;
+  private masterLimiter: Tone.Limiter | null = null;
 
   async start(): Promise<void> {
     if (Tone.context.state !== "running") {
@@ -71,37 +63,54 @@ export class CTAAudioEngine {
     const instrument =
       this.lineToInstrument[canonicalLine] ??
       this.lineToInstrument[
-        canonicalLine.charAt(0).toUpperCase() + canonicalLine.slice(1).toLowerCase()
+        canonicalLine.charAt(0).toUpperCase() +
+          canonicalLine.slice(1).toLowerCase()
       ] ??
       this.fallbackInstrument;
     if (!instrument) return false;
 
     this.noteCountInWindow += 1;
-    Tone.Transport.scheduleOnce(() => {
-      try {
-        instrument.triggerAttackRelease(event.note, "8n");
-      } catch {
-        // Ignore malformed events so audio graph stays healthy.
-      }
-    }, "+0.1");
+    try {
+      instrument.triggerAttackRelease(event.note, 0.5, Tone.now() + 0.01);
+    } catch {
+      // Ignore malformed events so audio graph stays healthy.
+    }
 
     return true;
   }
 
   private initializeInstruments(): void {
+    this.masterCompressor = new Tone.Compressor({
+      threshold: -24,
+      ratio: 3,
+      attack: 0.01,
+      release: 0.12,
+    });
+    this.masterLimiter = new Tone.Limiter(-3).toDestination();
+    this.masterCompressor.connect(this.masterLimiter);
+
+    const makeSawSynth = () =>
+      new Tone.Synth({
+        oscillator: { type: "sine" },
+        envelope: {
+          attack: 0.04,
+          decay: 0.04,
+          sustain: 1,
+          release: 0.08,
+        },
+      }).connect(this.masterCompressor!);
+
     this.lineToInstrument = {
-      Red: new Tone.Synth().toDestination(),
-      Blue: new Tone.FMSynth().toDestination(),
-      Brown: new Tone.PluckSynth().toDestination(),
-      Green: new Tone.MembraneSynth().toDestination(),
-      Orange: new Tone.Synth({ oscillator: { type: "sawtooth" } }).toDestination(),
-      Pink: new Tone.Synth({ oscillator: { type: "triangle" } }).toDestination(),
-      Purple: new Tone.PolySynth().toDestination(),
-      Yellow: new Tone.DuoSynth().toDestination(),
+      Red: makeSawSynth(),
+      Blue: makeSawSynth(),
+      Brown: makeSawSynth(),
+      Green: makeSawSynth(),
+      Orange: makeSawSynth(),
+      Pink: makeSawSynth(),
+      Purple: makeSawSynth(),
+      Yellow: makeSawSynth(),
     };
-    this.fallbackInstrument = new Tone.Synth({
-      oscillator: { type: "triangle" },
-    }).toDestination();
+    this.fallbackInstrument = makeSawSynth();
   }
 }
 

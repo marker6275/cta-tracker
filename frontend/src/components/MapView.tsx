@@ -9,7 +9,6 @@ import maplibregl, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import staticDataJson from "@/data/cta-static.json";
 import { useArrivalSocket } from "@/hooks/useArrivalSocket";
-import { audioEngine } from "@/lib/audioEngine";
 import type { CTAEvent, CTAStaticData, Train } from "@/types/cta";
 const defaultBounds: LngLatBoundsLike = [
   [-87.95, 41.62],
@@ -24,7 +23,6 @@ const MIN_SPEED_MPS = 1.5;
 const MAX_SPEED_MPS = 22;
 const ANIMATION_SPEED_FACTOR = 0.4;
 const DEBUG_TRAIN_ID = "921";
-const NOTE_SCALE = ["C4", "D4", "E4", "G4", "A4", "C5", "D5", "E5", "G5", "A5"];
 
 type SimTrainState = {
   id: string;
@@ -324,13 +322,6 @@ function trainDirection(
   return cardinalDirection(sim.lat, sim.lng, targetLat, targetLng);
 }
 
-function noteForStopId(stopId: string): string {
-  const hash = stopId
-    .split("")
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return NOTE_SCALE[hash % NOTE_SCALE.length];
-}
-
 export function MapView() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -368,15 +359,9 @@ export function MapView() {
   const [trains, setTrains] = useState<RenderTrain[]>([]);
   const [lastSyncMs, setLastSyncMs] = useState<number | null>(null);
   const [secondsSinceSync, setSecondsSinceSync] = useState(0);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
 
   const handleSocketEvent = (event: CTAEvent) => {
     if (event.type === "arrival") {
-      audioEngine.schedulePlay({
-        line: event.line,
-        note: noteForStopId(event.stopId),
-      });
       return;
     }
 
@@ -517,19 +502,6 @@ export function MapView() {
   };
 
   const { isConnected } = useArrivalSocket(handleSocketEvent);
-
-  const handleEnableAudio = async () => {
-    await audioEngine.start();
-    audioEngine.setMuted(false);
-    setIsMuted(false);
-    setAudioEnabled(true);
-  };
-
-  const handleMuteToggle = () => {
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-    audioEngine.setMuted(nextMuted);
-  };
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -731,10 +703,6 @@ export function MapView() {
             distanceToNextStop <= STOP_ARRIVAL_RADIUS_METERS &&
             sim.lastDwelledStopId !== nextStop.id
           ) {
-            audioEngine.schedulePlay({
-              line: sim.line,
-              note: noteForStopId(nextStop.id),
-            });
             sim.dwellStopId = nextStop.id;
             sim.dwellUntilMs = now + STOP_DWELL_MS;
             sim.lastDwelledStopId = nextStop.id;
@@ -843,29 +811,8 @@ export function MapView() {
             {lastSyncMs === null ? "--" : `${secondsSinceSync}s ago`}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span>Audio</span>
-          {!audioEnabled ? (
-            <button
-              type="button"
-              onClick={() => void handleEnableAudio()}
-              className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-500"
-            >
-              Enable
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleMuteToggle}
-              className="rounded bg-slate-700 px-2 py-1 text-xs font-semibold text-slate-100 hover:bg-slate-600"
-            >
-              {isMuted ? "Unmute" : "Mute"}
-            </button>
-          )}
-        </div>
         <p className="text-xs text-slate-300">
-          Colored CTA lines, stop tick marks, train markers, and line/stop notes
-          on arrivals.
+          Colored CTA lines, stop tick marks, and real-time train markers.
         </p>
       </div>
     </div>
