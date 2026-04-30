@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CTA WebSocket Event",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "arrival" },
+        "line": { "type": "string" },
+        "stopId": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["type", "line", "stopId", "timestamp"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "train_update" },
+        "trains": { "type": "array" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["type", "trains", "timestamp"]
+    }
+  ]
+}
